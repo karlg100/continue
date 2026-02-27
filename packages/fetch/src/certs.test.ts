@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import tls from "node:tls";
 import { beforeEach, expect, test, vi } from "vitest";
 import { CertsCache, getCertificateContent } from "./certs.js";
 
@@ -159,6 +160,42 @@ test("CertsCache.getCa should return combined CA when caBundlePath is provided",
 
   const ca = await certsCache.getCa(customCertPath);
   expect(ca).toEqual([...fixedCa, customCertContent]);
+});
+
+test("CertsCache.fixedCa uses tls.getCACertificates stores when available", () => {
+  const certsCache = CertsCache.getInstance();
+
+  const getCACertificatesSpy = vi
+    .spyOn(tls, "getCACertificates")
+    .mockImplementation((type?: any) => {
+      switch (type) {
+        case "default":
+          return ["default-cert"];
+        case "system":
+          return ["system-cert"];
+        case "bundled":
+          return ["bundled-cert"];
+        case "extra":
+          return ["extra-cert"];
+        default:
+          return [];
+      }
+    });
+
+  certsCache.clear();
+
+  const fixedCa = certsCache.fixedCa;
+
+  expect(fixedCa).toEqual(
+    expect.arrayContaining([
+      "default-cert",
+      "system-cert",
+      "bundled-cert",
+      "extra-cert",
+    ]),
+  );
+
+  getCACertificatesSpy.mockRestore();
 });
 
 test("CertsCache.clear should clear custom certs and reset initialized flag", () => {
