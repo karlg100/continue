@@ -2,6 +2,23 @@ import { globalAgent } from "https";
 import * as fs from "node:fs";
 import tls from "node:tls";
 
+function getNodeCaCertificates(): string[] {
+  // Node.js >= 22 exposes the complete trust stores via getCACertificates.
+  // Prefer these stores when available so platform-managed/system roots
+  // (e.g. corporate CAs installed in macOS/Windows trust stores) are honored.
+  if (typeof tls.getCACertificates === "function") {
+    return [
+      ...tls.getCACertificates("default"),
+      ...tls.getCACertificates("system"),
+      ...tls.getCACertificates("bundled"),
+      ...tls.getCACertificates("extra"),
+    ];
+  }
+
+  // Older Node.js versions only expose the bundled roots.
+  return tls.rootCertificates;
+}
+
 /**
  * Extracts content from either a file path or data URI
  */
@@ -70,7 +87,7 @@ export class CertsCache {
     }
 
     this._fixedCa = Array.from(
-      new Set([...tls.rootCertificates, ...globalCerts, ...extraCerts]),
+      new Set([...getNodeCaCertificates(), ...globalCerts, ...extraCerts]),
     );
     this._initialized = true;
     return this._fixedCa;
